@@ -3814,6 +3814,8 @@ pub enum Statement {
     /// ALTER INDEX
     /// ```
     AlterIndex {
+        /// Whether `IF EXISTS` was specified.
+        if_exists: bool,
         /// Name of the index to alter.
         name: ObjectName,
         /// The operation to perform on the index.
@@ -5641,8 +5643,16 @@ impl fmt::Display for Statement {
             Statement::CreateOperatorClass(create_operator_class) => create_operator_class.fmt(f),
             Statement::CreateTextSearch(create_text_search) => create_text_search.fmt(f),
             Statement::AlterTable(alter_table) => write!(f, "{alter_table}"),
-            Statement::AlterIndex { name, operation } => {
-                write!(f, "ALTER INDEX {name} {operation}")
+            Statement::AlterIndex {
+                if_exists,
+                name,
+                operation,
+            } => {
+                write!(
+                    f,
+                    "ALTER INDEX {if_exists}{name} {operation}",
+                    if_exists = if *if_exists { "IF EXISTS " } else { "" }
+                )
             }
             Statement::AlterView {
                 name,
@@ -6866,7 +6876,12 @@ pub struct OnConflict {
 /// Target specification for an `ON CONFLICT` clause.
 pub enum ConflictTarget {
     /// Target specified as a list of columns.
-    Columns(Vec<Ident>),
+    Columns {
+        /// Columns used to infer a unique index.
+        columns: Vec<Ident>,
+        /// Optional predicate used to infer a partial unique index.
+        predicate: Option<Expr>,
+    },
     /// Target specified as a named constraint.
     OnConstraint(ObjectName),
 }
@@ -6916,7 +6931,13 @@ impl fmt::Display for OnConflict {
 impl fmt::Display for ConflictTarget {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            ConflictTarget::Columns(cols) => write!(f, "({})", display_comma_separated(cols)),
+            ConflictTarget::Columns { columns, predicate } => {
+                write!(f, "({})", display_comma_separated(columns))?;
+                if let Some(predicate) = predicate {
+                    write!(f, " WHERE {predicate}")?;
+                }
+                Ok(())
+            }
             ConflictTarget::OnConstraint(name) => write!(f, " ON CONSTRAINT {name}"),
         }
     }

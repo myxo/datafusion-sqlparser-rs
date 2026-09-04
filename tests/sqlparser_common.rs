@@ -5343,6 +5343,20 @@ fn parse_alter_index() {
     let rename_index = "ALTER INDEX idx RENAME TO new_idx";
     match verified_stmt(rename_index) {
         Statement::AlterIndex {
+            if_exists: false,
+            name,
+            operation: AlterIndexOperation::RenameIndex { index_name },
+        } => {
+            assert_eq!("idx", name.to_string());
+            assert_eq!("new_idx", index_name.to_string())
+        }
+        _ => unreachable!(),
+    };
+
+    let rename_if_exists = "ALTER INDEX IF EXISTS idx RENAME TO new_idx";
+    match verified_stmt(rename_if_exists) {
+        Statement::AlterIndex {
+            if_exists: true,
             name,
             operation: AlterIndexOperation::RenameIndex { index_name },
         } => {

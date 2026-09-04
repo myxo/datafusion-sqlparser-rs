@@ -2269,19 +2269,27 @@ fn parse_pg_on_conflict() {
     let stmt = pg_and_generic().verified_stmt(
         "INSERT INTO distributors (did, dname) \
         VALUES (5, 'Gizmo Transglobal'), (6, 'Associated Computing, Inc') \
-        ON CONFLICT(did) \
+        ON CONFLICT(did) WHERE dname IS NOT NULL \
         DO UPDATE SET dname = EXCLUDED.dname",
     );
     match stmt {
         Statement::Insert(Insert {
             on:
                 Some(OnInsert::OnConflict(OnConflict {
-                    conflict_target: Some(ConflictTarget::Columns(cols)),
+                    conflict_target:
+                        Some(ConflictTarget::Columns {
+                            columns: cols,
+                            predicate,
+                        }),
                     action,
                 })),
             ..
         }) => {
             assert_eq!(vec![Ident::from("did")], cols);
+            assert_eq!(
+                predicate.map(|expression| expression.to_string()),
+                Some("dname IS NOT NULL".to_string())
+            );
             assert_eq!(
                 OnConflictAction::DoUpdate(DoUpdate {
                     assignments: vec![Assignment {
@@ -2308,7 +2316,11 @@ fn parse_pg_on_conflict() {
         Statement::Insert(Insert {
             on:
                 Some(OnInsert::OnConflict(OnConflict {
-                    conflict_target: Some(ConflictTarget::Columns(cols)),
+                    conflict_target:
+                        Some(ConflictTarget::Columns {
+                            columns: cols,
+                            predicate: None,
+                        }),
                     action,
                 })),
             ..
@@ -2370,7 +2382,11 @@ fn parse_pg_on_conflict() {
         Statement::Insert(Insert {
             on:
                 Some(OnInsert::OnConflict(OnConflict {
-                    conflict_target: Some(ConflictTarget::Columns(cols)),
+                    conflict_target:
+                        Some(ConflictTarget::Columns {
+                            columns: cols,
+                            predicate: None,
+                        }),
                     action,
                 })),
             ..

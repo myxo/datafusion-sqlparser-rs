@@ -402,7 +402,11 @@ impl Spanned for Statement {
             Statement::CreateOperatorClass(create_operator_class) => create_operator_class.span(),
             Statement::CreateTextSearch(create_text_search) => create_text_search.span(),
             Statement::AlterTable(alter_table) => alter_table.span(),
-            Statement::AlterIndex { name, operation } => name.span().union(&operation.span()),
+            Statement::AlterIndex {
+                if_exists: _,
+                name,
+                operation,
+            } => name.span().union(&operation.span()),
             Statement::AlterView {
                 name,
                 columns,
@@ -1415,7 +1419,12 @@ impl Spanned for OnConflict {
 impl Spanned for ConflictTarget {
     fn span(&self) -> Span {
         match self {
-            ConflictTarget::Columns(vec) => union_spans(vec.iter().map(|i| i.span)),
+            ConflictTarget::Columns { columns, predicate } => union_spans(
+                columns
+                    .iter()
+                    .map(|i| i.span)
+                    .chain(predicate.iter().map(Spanned::span)),
+            ),
             ConflictTarget::OnConstraint(object_name) => object_name.span(),
         }
     }
