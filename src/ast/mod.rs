@@ -3822,6 +3822,18 @@ pub enum Statement {
         operation: AlterIndexOperation,
     },
     /// ```sql
+    /// ALTER TRIGGER name ON table RENAME TO new_name
+    /// ```
+    AlterTrigger {
+        /// Name of the trigger to alter.
+        name: Ident,
+        /// Table containing the trigger.
+        #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
+        table_name: ObjectName,
+        /// New trigger name.
+        new_name: Ident,
+    },
+    /// ```sql
     /// ALTER VIEW
     /// ```
     AlterView {
@@ -5654,6 +5666,14 @@ impl fmt::Display for Statement {
                     if_exists = if *if_exists { "IF EXISTS " } else { "" }
                 )
             }
+            Statement::AlterTrigger {
+                name,
+                table_name,
+                new_name,
+            } => write!(
+                f,
+                "ALTER TRIGGER {name} ON {table_name} RENAME TO {new_name}"
+            ),
             Statement::AlterView {
                 name,
                 columns,

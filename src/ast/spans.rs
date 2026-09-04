@@ -407,6 +407,11 @@ impl Spanned for Statement {
                 name,
                 operation,
             } => name.span().union(&operation.span()),
+            Statement::AlterTrigger {
+                name,
+                table_name,
+                new_name,
+            } => union_spans([name.span, table_name.span(), new_name.span].into_iter()),
             Statement::AlterView {
                 name,
                 columns,

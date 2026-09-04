@@ -11175,6 +11175,7 @@ impl<'a> Parser<'a> {
             Keyword::SCHEMA,
             Keyword::USER,
             Keyword::OPERATOR,
+            Keyword::TRIGGER,
         ])?;
         match object_type {
             Keyword::SCHEMA => {
@@ -11210,6 +11211,18 @@ impl<'a> Parser<'a> {
                     operation,
                 })
             }
+            Keyword::TRIGGER => {
+                let name = self.parse_identifier()?;
+                self.expect_keyword_is(Keyword::ON)?;
+                let table_name = self.parse_object_name(false)?;
+                self.expect_keywords(&[Keyword::RENAME, Keyword::TO])?;
+                let new_name = self.parse_identifier()?;
+                Ok(Statement::AlterTrigger {
+                    name,
+                    table_name,
+                    new_name,
+                })
+            }
             Keyword::FUNCTION => self.parse_alter_function(AlterFunctionKind::Function),
             Keyword::AGGREGATE => self.parse_alter_function(AlterFunctionKind::Aggregate),
             Keyword::OPERATOR => {
@@ -11230,7 +11243,7 @@ impl<'a> Parser<'a> {
             Keyword::USER => self.parse_alter_user().map(Into::into),
             // unreachable because expect_one_of_keywords used above
             unexpected_keyword => Err(ParserError::ParserError(
-                format!("Internal parser error: expected any of {{TEXT SEARCH, VIEW, TYPE, COLLATION, TABLE, INDEX, FUNCTION, AGGREGATE, ROLE, POLICY, CONNECTOR, ICEBERG, SCHEMA, USER, OPERATOR}}, got {unexpected_keyword:?}"),
+                format!("Internal parser error: expected any of {{TEXT SEARCH, VIEW, TYPE, COLLATION, TABLE, INDEX, TRIGGER, FUNCTION, AGGREGATE, ROLE, POLICY, CONNECTOR, ICEBERG, SCHEMA, USER, OPERATOR}}, got {unexpected_keyword:?}"),
             )),
         }
     }
