@@ -11309,6 +11309,7 @@ impl<'a> Parser<'a> {
                 self.parse_alter_table(true)
             }
             Keyword::INDEX => {
+                let if_exists = self.parse_keywords(&[Keyword::IF, Keyword::EXISTS]);
                 let index_name = self.parse_object_name(false)?;
                 let operation = if self.parse_keyword(Keyword::RENAME) {
                     if self.parse_keyword(Keyword::TO) {
@@ -11322,6 +11323,7 @@ impl<'a> Parser<'a> {
                 };
 
                 Ok(Statement::AlterIndex {
+                    if_exists,
                     name: index_name,
                     operation,
                 })
@@ -18750,9 +18752,14 @@ impl<'a> Parser<'a> {
                         if self.parse_keywords(&[Keyword::ON, Keyword::CONSTRAINT]) {
                             Some(ConflictTarget::OnConstraint(self.parse_object_name(false)?))
                         } else if self.peek_token_ref().token == Token::LParen {
-                            Some(ConflictTarget::Columns(
-                                self.parse_parenthesized_column_list(IsOptional::Mandatory, false)?,
-                            ))
+                            let columns =
+                                self.parse_parenthesized_column_list(IsOptional::Mandatory, false)?;
+                            let predicate = if self.parse_keyword(Keyword::WHERE) {
+                                Some(self.parse_expr()?)
+                            } else {
+                                None
+                            };
+                            Some(ConflictTarget::Columns { columns, predicate })
                         } else {
                             None
                         };
