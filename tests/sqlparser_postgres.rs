@@ -10142,3 +10142,21 @@ fn parse_bitstring_literal_escaping() {
     pg_and_generic().verified_stmt("SELECT B''''");
     pg_and_generic().verified_stmt("SELECT B'it''s'");
 }
+
+#[test]
+fn parse_alter_trigger_rename() {
+    match pg_and_generic()
+        .verified_stmt("ALTER TRIGGER audit_changes ON public.accounts RENAME TO audit_accounts")
+    {
+        Statement::AlterTrigger {
+            name,
+            table_name,
+            new_name,
+        } => {
+            assert_eq!(name.value, "audit_changes");
+            assert_eq!(table_name.to_string(), "public.accounts");
+            assert_eq!(new_name.value, "audit_accounts");
+        }
+        _ => unreachable!(),
+    }
+}
