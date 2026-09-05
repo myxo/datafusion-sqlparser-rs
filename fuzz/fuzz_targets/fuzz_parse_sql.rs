@@ -46,4 +46,7 @@ fuzz_target!(|sql: &str| {
     for dialect in dialects {
         let _ = Parser::parse_sql(dialect, sql);
     }
+    if let Ok(mut parser) = Parser::new(&PostgreSqlDialect {}).try_with_sql(sql) {
+        let _ = parser.parse_plpgsql();
+    }
 });

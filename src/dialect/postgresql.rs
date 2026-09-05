@@ -73,6 +73,17 @@ const AND_PREC: u8 = 20;
 const OR_PREC: u8 = 10;
 
 impl Dialect for PostgreSqlDialect {
+    fn supports_do_statement(&self) -> bool {
+        true
+    }
+
+    fn is_select_item_alias(&self, explicit: bool, keyword: &Keyword, parser: &mut Parser) -> bool {
+        if !explicit && *keyword == Keyword::ON && parser.peek_keyword(Keyword::CONFLICT) {
+            return false;
+        }
+        explicit || !keywords::RESERVED_FOR_COLUMN_ALIAS.contains(keyword)
+    }
+
     fn identifier_quote_style(&self, _identifier: &str) -> Option<char> {
         Some('"')
     }

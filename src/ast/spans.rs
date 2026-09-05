@@ -340,6 +340,7 @@ impl Spanned for Statement {
             Statement::If(stmt) => stmt.span(),
             Statement::While(stmt) => stmt.span(),
             Statement::Raise(stmt) => stmt.span(),
+            Statement::Do(_) => Span::empty(),
             Statement::Call(function) => function.span(),
             Statement::Copy {
                 source,
