@@ -94,6 +94,9 @@ pub use self::dml::{
     MultiTableInsertWhenClause, OutputClause, Update,
 };
 pub use self::operator::{BinaryOperator, UnaryOperator};
+pub use self::procedural::{
+    DoStatement, PlPgSqlBlock, PlPgSqlDeclaration, PlPgSqlIfBranch, PlPgSqlStatement,
+};
 pub use self::query::{
     AfterMatchSkip, ConnectByKind, Cte, CteAsMaterialized, Distinct, EmptyMatchesMode,
     ExceptSelectItem, ExcludeSelectItem, ExprWithAlias, ExprWithAliasAndOrderBy, Fetch, ForClause,
@@ -147,6 +150,7 @@ pub use table_constraints::{
     PrimaryKeyConstraint, TableConstraint, UniqueConstraint,
 };
 mod operator;
+mod procedural;
 mod query;
 mod spans;
 pub use spans::Spanned;
@@ -3635,6 +3639,8 @@ pub enum Statement {
     While(WhileStatement),
     /// A `RAISE` statement.
     Raise(RaiseStatement),
+    /// PostgreSQL anonymous procedural block.
+    Do(DoStatement),
     /// ```sql
     /// CALL <function>
     /// ```
@@ -5280,6 +5286,9 @@ impl fmt::Display for Statement {
                 write!(f, "{stmt}")
             }
             Statement::Raise(stmt) => {
+                write!(f, "{stmt}")
+            }
+            Statement::Do(stmt) => {
                 write!(f, "{stmt}")
             }
             Statement::AttachDatabase {
@@ -12415,6 +12424,12 @@ impl From<WhileStatement> for Statement {
 impl From<RaiseStatement> for Statement {
     fn from(r: RaiseStatement) -> Self {
         Self::Raise(r)
+    }
+}
+
+impl From<DoStatement> for Statement {
+    fn from(statement: DoStatement) -> Self {
+        Self::Do(statement)
     }
 }
 

@@ -71,6 +71,7 @@ macro_rules! parser_err {
 
 mod alter;
 mod merge;
+mod procedural;
 
 /// Implementation of [`RecursionCounter`].
 ///
@@ -623,6 +624,9 @@ impl<'a> Parser<'a> {
                 Keyword::FLUSH => self.parse_flush(),
                 Keyword::DESC => self.parse_explain(DescribeAlias::Desc),
                 Keyword::DESCRIBE => self.parse_explain(DescribeAlias::Describe),
+                Keyword::DO if self.dialect.supports_do_statement() => {
+                    self.parse_do_statement().map(Into::into)
+                }
                 Keyword::EXPLAIN => self.parse_explain(DescribeAlias::Explain),
                 Keyword::ANALYZE => self.parse_analyze().map(Into::into),
                 Keyword::CASE => {

@@ -1124,6 +1124,11 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if this dialect supports PostgreSQL anonymous `DO` blocks.
+    fn supports_do_statement(&self) -> bool {
+        false
+    }
+
     /// Does the dialect support with clause in create index statement?
     /// e.g. `CREATE INDEX idx ON t WITH (key = value, key2)`
     fn supports_create_index_with_clause(&self) -> bool {

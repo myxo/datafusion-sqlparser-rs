@@ -9952,3 +9952,155 @@ fn parse_alter_trigger_rename() {
         _ => unreachable!(),
     }
 }
+
+#[test]
+fn parse_postgres_do_statements() {
+    let statement = pg().verified_stmt("DO $$BEGIN END$$");
+    assert!(matches!(
+        statement,
+        Statement::Do(DoStatement {
+            body: ValueWithSpan {
+                value: Value::DollarQuotedString(DollarQuotedString { tag: None, .. }),
+                ..
+            },
+            language: None,
+            ..
+        })
+    ));
+    pg().verified_stmt("DO LANGUAGE plpgsql $body$BEGIN END$body$");
+    pg().verified_stmt("DO $body$BEGIN END$body$ LANGUAGE plpgsql");
+    assert!(pg()
+        .parse_sql_statements("DO LANGUAGE plpgsql $$BEGIN END$$ LANGUAGE plpgsql")
+        .is_err());
+    assert!(Parser::parse_sql(&MySqlDialect {}, "DO $$BEGIN END$$").is_err());
+}
+
+#[test]
+fn parse_postgres_plpgsql_block() {
+    let sql = r#"
+DECLARE
+    affected BIGINT := 0;
+    message TEXT;
+BEGIN
+    NEW.value = NEW.value + 1;
+    IF NEW.value IS NULL THEN
+        RETURN NULL;
+    ELSIF NEW.value > 10 THEN
+        NEW.value := 10;
+    ELSE
+        RETURN NEW;
+    END IF;
+    UPDATE items SET value = value + 1;
+    GET DIAGNOSTICS affected = ROW_COUNT;
+    SELECT affected, 'done' INTO affected, message;
+    RAISE EXCEPTION 'affected %: %%', affected USING HINT = 'retry';
+END;
+"#;
+    let mut parser = Parser::new(&PostgreSqlDialect {})
+        .try_with_sql(sql)
+        .unwrap();
+    let block = parser.parse_plpgsql().unwrap();
+    assert_eq!(block.declarations.len(), 2);
+    assert_eq!(block.statements.len(), 6);
+    assert!(matches!(
+        &block.statements[1],
+        PlPgSqlStatement::If {
+            branches,
+            else_statements: Some(_),
+        } if branches.len() == 2
+    ));
+
+    let displayed = block.to_string();
+    let mut parser = Parser::new(&PostgreSqlDialect {})
+        .try_with_sql(&displayed)
+        .unwrap();
+    assert_eq!(block, parser.parse_plpgsql().unwrap());
+}
+
+#[test]
+fn reject_invalid_postgres_plpgsql_blocks() {
+    for sql in [
+        "BEGIN LOOP NULL; END LOOP; END;",
+        "BEGIN IF TRUE RETURN NEW; END IF; END;",
+        "BEGIN GET DIAGNOSTICS n = RESULT_OID; END;",
+        "BEGIN RAISE NOTICE 'ignored'; END;",
+        "BEGIN RETURN NEW END;",
+        "BEGIN END; SELECT 1",
+    ] {
+        let mut parser = Parser::new(&PostgreSqlDialect {})
+            .try_with_sql(sql)
+            .unwrap();
+        assert!(parser.parse_plpgsql().is_err(), "accepted {sql:?}");
+    }
+}
+
+#[test]
+fn parse_postgres_plpgsql_initializers_and_embedded_queries() {
+    let sql = r#"
+DECLARE
+    first BIGINT DEFAULT 1;
+    second BIGINT = 2;
+    message TEXT := 'ready';
+BEGIN
+    first := second;
+    IF first = 1 THEN
+        INSERT INTO destination SELECT first, message;
+    ELSEIF first = 2 THEN
+        WITH source AS (SELECT first AS value)
+        SELECT value, message INTO first, message FROM source;
+    ELSE
+        UPDATE destination SET value = first FROM source WHERE destination.id = source.id;
+    END IF;
+    GET DIAGNOSTICS second = ROW_COUNT;
+END;
+"#;
+    let mut parser = Parser::new(&PostgreSqlDialect {})
+        .try_with_sql(sql)
+        .unwrap();
+    let block = parser.parse_plpgsql().unwrap();
+    assert_eq!(block.declarations.len(), 3);
+    assert!(block
+        .declarations
+        .iter()
+        .all(|declaration| declaration.initializer.is_some()));
+    assert!(matches!(
+        &block.statements[1],
+        PlPgSqlStatement::If { branches, .. } if branches.len() == 2
+    ));
+    let displayed = block.to_string();
+    let mut parser = Parser::new(&PostgreSqlDialect {})
+        .try_with_sql(&displayed)
+        .unwrap();
+    assert_eq!(block, parser.parse_plpgsql().unwrap());
+}
+
+#[test]
+fn reject_unsupported_postgres_plpgsql_statements() {
+    for sql in [
+        "BEGIN PERFORM work(); END;",
+        "BEGIN EXECUTE 'SELECT 1'; END;",
+        "BEGIN FOR value IN 1..2 LOOP RETURN NEW; END LOOP; END;",
+        "BEGIN BEGIN RETURN NEW; EXCEPTION WHEN OTHERS THEN RETURN NULL; END; END;",
+        "BEGIN GET DIAGNOSTICS first = ROW_COUNT, second = ROW_COUNT; END;",
+        "BEGIN RAISE EXCEPTION 'failure' USING DETAIL = 'detail'; END;",
+    ] {
+        let mut parser = Parser::new(&PostgreSqlDialect {})
+            .try_with_sql(sql)
+            .unwrap();
+        assert!(parser.parse_plpgsql().is_err(), "accepted {sql:?}");
+    }
+}
+
+#[test]
+fn parse_postgres_insert_source_with_nested_parentheses() {
+    pg().verified_stmt(
+        "INSERT INTO destination SELECT 1, 10 \
+         ON CONFLICT (id) DO UPDATE SET value = excluded.value RETURNING id, value",
+    );
+    pg().verified_stmt(
+        "INSERT INTO destination (id, value) \
+         ((SELECT 1, 10 LIMIT 1) UNION ALL SELECT 2, 20) \
+         UNION ALL SELECT 3, 30 \
+         ON CONFLICT (id) DO UPDATE SET value = excluded.value RETURNING id, value",
+    );
+}

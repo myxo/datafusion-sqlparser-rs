@@ -45,6 +45,9 @@ fn main() {
             for dialect in &dialects {
                 let _ = Parser::parse_sql(dialect.as_ref(), &data);
             }
+            if let Ok(mut parser) = Parser::new(&PostgreSqlDialect {}).try_with_sql(&data) {
+                let _ = parser.parse_plpgsql();
+            }
         });
     }
 }
