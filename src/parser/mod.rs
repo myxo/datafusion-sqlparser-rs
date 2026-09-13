@@ -19648,19 +19648,34 @@ impl<'a> Parser<'a> {
         })
     }
 
-    /// Parse a FOR UPDATE/FOR SHARE clause
+    /// Parse a row-locking clause.
     pub fn parse_lock(&mut self) -> Result<LockClause, ParserError> {
-        let lock_type = match self.expect_one_of_keywords(&[Keyword::UPDATE, Keyword::SHARE])? {
+        let lock_type = match self.expect_one_of_keywords(&[
+            Keyword::UPDATE,
+            Keyword::SHARE,
+            Keyword::NO,
+            Keyword::KEY,
+        ])? {
             Keyword::UPDATE => LockType::Update,
             Keyword::SHARE => LockType::Share,
-            unexpected_keyword => return Err(ParserError::ParserError(
-                format!("Internal parser error: expected any of {{UPDATE, SHARE}}, got {unexpected_keyword:?}"),
-            )),
+            Keyword::NO => {
+                self.expect_keywords(&[Keyword::KEY, Keyword::UPDATE])?;
+                LockType::NoKeyUpdate
+            }
+            Keyword::KEY => {
+                self.expect_keyword(Keyword::SHARE)?;
+                LockType::KeyShare
+            }
+            unexpected_keyword => {
+                return Err(ParserError::ParserError(format!(
+                "Internal parser error: expected a row-lock strength, got {unexpected_keyword:?}"
+            )))
+            }
         };
         let of = if self.parse_keyword(Keyword::OF) {
-            Some(self.parse_object_name(false)?)
+            self.parse_comma_separated(|parser| parser.parse_object_name(false))?
         } else {
-            None
+            Vec::new()
         };
         let nonblock = if self.parse_keyword(Keyword::NOWAIT) {
             Some(NonBlock::Nowait)

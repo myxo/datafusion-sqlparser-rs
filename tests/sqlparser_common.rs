@@ -10798,7 +10798,7 @@ fn test_lock() {
     assert_eq!(ast.locks.len(), 1);
     let lock = ast.locks.pop().unwrap();
     assert_eq!(lock.lock_type, LockType::Update);
-    assert!(lock.of.is_none());
+    assert!(lock.of.is_empty());
     assert!(lock.nonblock.is_none());
 
     let sql = "SELECT * FROM student WHERE id = '1' FOR SHARE";
@@ -10806,7 +10806,7 @@ fn test_lock() {
     assert_eq!(ast.locks.len(), 1);
     let lock = ast.locks.pop().unwrap();
     assert_eq!(lock.lock_type, LockType::Share);
-    assert!(lock.of.is_none());
+    assert!(lock.of.is_empty());
     assert!(lock.nonblock.is_none());
 }
 
@@ -10818,7 +10818,7 @@ fn test_lock_table() {
     let lock = ast.locks.pop().unwrap();
     assert_eq!(lock.lock_type, LockType::Update);
     assert_eq!(
-        lock.of.unwrap(),
+        lock.of.into_iter().next().unwrap(),
         ObjectName::from(vec![Ident {
             value: "school".to_string(),
             quote_style: None,
@@ -10833,7 +10833,7 @@ fn test_lock_table() {
     let lock = ast.locks.pop().unwrap();
     assert_eq!(lock.lock_type, LockType::Share);
     assert_eq!(
-        lock.of.unwrap(),
+        lock.of.into_iter().next().unwrap(),
         ObjectName::from(vec![Ident {
             value: "school".to_string(),
             quote_style: None,
@@ -10848,7 +10848,7 @@ fn test_lock_table() {
     let lock = ast.locks.remove(0);
     assert_eq!(lock.lock_type, LockType::Share);
     assert_eq!(
-        lock.of.unwrap(),
+        lock.of.into_iter().next().unwrap(),
         ObjectName::from(vec![Ident {
             value: "school".to_string(),
             quote_style: None,
@@ -10859,7 +10859,7 @@ fn test_lock_table() {
     let lock = ast.locks.remove(0);
     assert_eq!(lock.lock_type, LockType::Update);
     assert_eq!(
-        lock.of.unwrap(),
+        lock.of.into_iter().next().unwrap(),
         ObjectName::from(vec![Ident {
             value: "student".to_string(),
             quote_style: None,
@@ -10877,7 +10877,7 @@ fn test_lock_nonblock() {
     let lock = ast.locks.pop().unwrap();
     assert_eq!(lock.lock_type, LockType::Update);
     assert_eq!(
-        lock.of.unwrap(),
+        lock.of.into_iter().next().unwrap(),
         ObjectName::from(vec![Ident {
             value: "school".to_string(),
             quote_style: None,
@@ -10892,7 +10892,7 @@ fn test_lock_nonblock() {
     let lock = ast.locks.pop().unwrap();
     assert_eq!(lock.lock_type, LockType::Share);
     assert_eq!(
-        lock.of.unwrap(),
+        lock.of.into_iter().next().unwrap(),
         ObjectName::from(vec![Ident {
             value: "school".to_string(),
             quote_style: None,
@@ -20015,4 +20015,45 @@ fn parse_function_arg_call_chain_no_exponential_blowup() {
 
     rx.recv_timeout(Duration::from_secs(5))
         .expect("parser should reject this quickly, not loop exponentially");
+}
+
+#[test]
+fn parse_row_lock_strengths_and_relations() {
+    for (strength, expected) in [
+        ("UPDATE", LockType::Update),
+        ("NO KEY UPDATE", LockType::NoKeyUpdate),
+        ("SHARE", LockType::Share),
+        ("KEY SHARE", LockType::KeyShare),
+    ] {
+        for (suffix, nonblock) in [
+            ("", None),
+            (" NOWAIT", Some(NonBlock::Nowait)),
+            (" SKIP LOCKED", Some(NonBlock::SkipLocked)),
+        ] {
+            let sql = format!("SELECT * FROM a, b FOR {strength} OF a, b{suffix}");
+            let query = verified_query(&sql);
+            assert_eq!(query.locks.len(), 1);
+            assert_eq!(query.locks[0].lock_type, expected);
+            assert_eq!(
+                query.locks[0].of,
+                vec![
+                    ObjectName::from(vec![Ident::new("a")]),
+                    ObjectName::from(vec![Ident::new("b")])
+                ]
+            );
+            assert_eq!(query.locks[0].nonblock, nonblock);
+
+            let query = verified_query(&format!("SELECT * FROM a FOR {strength}{suffix}"));
+            assert_eq!(query.locks[0].lock_type, expected);
+            assert!(query.locks[0].of.is_empty());
+            assert_eq!(query.locks[0].nonblock, nonblock);
+        }
+    }
+    for sql in [
+        "SELECT * FROM a FOR NO UPDATE",
+        "SELECT * FROM a FOR KEY UPDATE",
+        "SELECT * FROM a FOR NO KEY SHARE",
+    ] {
+        assert!(all_dialects().parse_sql_statements(sql).is_err(), "{sql}");
+    }
 }

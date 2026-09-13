@@ -3565,8 +3565,8 @@ impl fmt::Display for Fetch {
 pub struct LockClause {
     /// The kind of lock requested (e.g. `SHARE`, `UPDATE`).
     pub lock_type: LockType,
-    /// Optional object name after `OF` (e.g. `FOR UPDATE OF t1`).
-    pub of: Option<ObjectName>,
+    /// Object names after `OF` (e.g. `FOR UPDATE OF t1, t2`).
+    pub of: Vec<ObjectName>,
     /// Optional non-blocking behavior (`NOWAIT` / `SKIP LOCKED`).
     pub nonblock: Option<NonBlock>,
 }
@@ -3574,8 +3574,8 @@ pub struct LockClause {
 impl fmt::Display for LockClause {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(f, "FOR {}", self.lock_type)?;
-        if let Some(ref of) = self.of {
-            write!(f, " OF {of}")?;
+        if !self.of.is_empty() {
+            write!(f, " OF {}", display_comma_separated(&self.of))?;
         }
         if let Some(ref nb) = self.nonblock {
             write!(f, " {nb}")?;
@@ -3589,8 +3589,12 @@ impl fmt::Display for LockClause {
 #[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
 /// The lock type used in `FOR <lock>` clauses (e.g. `FOR SHARE`, `FOR UPDATE`).
 pub enum LockType {
+    /// `KEY SHARE` lock.
+    KeyShare,
     /// `SHARE` lock (shared lock).
     Share,
+    /// `NO KEY UPDATE` lock.
+    NoKeyUpdate,
     /// `UPDATE` lock (exclusive/update lock).
     Update,
 }
@@ -3598,7 +3602,9 @@ pub enum LockType {
 impl fmt::Display for LockType {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let select_lock = match self {
+            LockType::KeyShare => "KEY SHARE",
             LockType::Share => "SHARE",
+            LockType::NoKeyUpdate => "NO KEY UPDATE",
             LockType::Update => "UPDATE",
         };
         write!(f, "{select_lock}")

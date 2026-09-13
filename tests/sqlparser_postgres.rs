@@ -10104,3 +10104,17 @@ fn parse_postgres_insert_source_with_nested_parentheses() {
          ON CONFLICT (id) DO UPDATE SET value = excluded.value RETURNING id, value",
     );
 }
+
+#[test]
+fn parse_postgres_multiple_row_locks_with_trailing_limit() {
+    pg().one_statement_parses_to(
+        "SELECT * FROM a, b FOR KEY SHARE OF a NOWAIT FOR NO KEY UPDATE OF b SKIP LOCKED LIMIT 3",
+        "SELECT * FROM a, b LIMIT 3 FOR KEY SHARE OF a NOWAIT FOR NO KEY UPDATE OF b SKIP LOCKED",
+    );
+    pg().verified_stmt(r#"SELECT * FROM a, b FOR NO KEY UPDATE OF public.a, "B" SKIP LOCKED"#);
+}
+
+#[test]
+fn reject_postgres_trailing_row_lock_relation_comma() {
+    assert!(Parser::parse_sql(&PostgreSqlDialect {}, "SELECT * FROM a FOR UPDATE OF a,").is_err());
+}
