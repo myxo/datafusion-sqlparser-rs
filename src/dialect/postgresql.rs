@@ -325,6 +325,14 @@ impl Dialect for PostgreSqlDialect {
         true
     }
 
+    fn supports_set_schema(&self) -> bool {
+        true
+    }
+
+    fn supports_reset_time_zone(&self) -> bool {
+        true
+    }
+
     fn supports_alter_column_type_using(&self) -> bool {
         true
     }
