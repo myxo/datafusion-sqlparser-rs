@@ -15786,6 +15786,15 @@ impl<'a> Parser<'a> {
                 }
                 .into());
             }
+        } else if self.dialect.supports_set_schema() && self.parse_keyword(Keyword::SCHEMA) {
+            let value = self.parse_literal_string()?;
+            return Ok(Set::SingleAssignment {
+                scope,
+                hivevar,
+                variable: ObjectName::from(vec!["search_path".into()]),
+                values: vec![Expr::Value(Value::SingleQuotedString(value).into())],
+            }
+            .into());
         } else if self.dialect.supports_set_names() && self.parse_keyword(Keyword::NAMES) {
             if self.parse_keyword(Keyword::DEFAULT) {
                 return Ok(Set::SetNamesDefault {}.into());
@@ -21258,6 +21267,13 @@ impl<'a> Parser<'a> {
             });
         }
 
+        if self.dialect.supports_reset_time_zone()
+            && self.parse_keywords(&[Keyword::TIME, Keyword::ZONE])
+        {
+            return Ok(ResetStatement {
+                reset: Reset::ConfigurationParameter(ObjectName::from(vec!["TimeZone".into()])),
+            });
+        }
         let obj = self.parse_object_name(false)?;
         Ok(ResetStatement {
             reset: Reset::ConfigurationParameter(obj),

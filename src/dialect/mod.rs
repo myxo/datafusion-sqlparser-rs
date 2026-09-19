@@ -1479,6 +1479,16 @@ pub trait Dialect: Debug + Any {
         false
     }
 
+    /// Returns true if the dialect supports `SET [SESSION | LOCAL] SCHEMA 'name'`.
+    fn supports_set_schema(&self) -> bool {
+        false
+    }
+
+    /// Returns true if the dialect supports `RESET TIME ZONE`.
+    fn supports_reset_time_zone(&self) -> bool {
+        false
+    }
+
     /// Returns true if the dialect supports space-separated column options
     /// in a `CREATE TABLE` statement. For example:
     /// ```sql
