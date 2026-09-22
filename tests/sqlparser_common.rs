@@ -20057,3 +20057,21 @@ fn parse_row_lock_strengths_and_relations() {
         assert!(all_dialects().parse_sql_statements(sql).is_err(), "{sql}");
     }
 }
+
+#[test]
+fn parse_unknown_string_window_frame_offsets() {
+    for sql in [
+        "SELECT count(*) OVER (ROWS '1' PRECEDING)",
+        "SELECT count(*) OVER (ORDER BY value RANGE BETWEEN '1' PRECEDING AND '2' FOLLOWING) FROM values",
+        "SELECT count(*) OVER (ORDER BY value GROUPS BETWEEN '1' PRECEDING AND '2' FOLLOWING) FROM values",
+    ] {
+        all_dialects().verified_stmt(sql);
+    }
+
+    for sql in [
+        "SELECT count(*) OVER (ROWS '1')",
+        "SELECT count(*) OVER (ROWS BETWEEN '1' PRECEDING AND '2')",
+    ] {
+        assert!(all_dialects().parse_sql_statements(sql).is_err(), "{sql}");
+    }
+}
