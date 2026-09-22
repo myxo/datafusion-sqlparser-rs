@@ -1477,6 +1477,9 @@ impl Spanned for AssignmentTarget {
     fn span(&self) -> Span {
         match self {
             AssignmentTarget::ColumnName(object_name) => object_name.span(),
+            AssignmentTarget::Subscript { column, subscripts } => column.span().union(
+                &union_spans(subscripts.iter().map(|subscript| subscript.span())),
+            ),
             AssignmentTarget::Tuple(vec) => union_spans(vec.iter().map(|i| i.span())),
         }
     }

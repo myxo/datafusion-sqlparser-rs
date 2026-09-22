@@ -18856,7 +18856,15 @@ impl<'a> Parser<'a> {
             Ok(AssignmentTarget::Tuple(columns))
         } else {
             let column = self.parse_object_name(false)?;
-            Ok(AssignmentTarget::ColumnName(column))
+            let mut subscripts = Vec::new();
+            while self.consume_token(&Token::LBracket) {
+                subscripts.push(self.parse_subscript_inner()?);
+            }
+            if subscripts.is_empty() {
+                Ok(AssignmentTarget::ColumnName(column))
+            } else {
+                Ok(AssignmentTarget::Subscript { column, subscripts })
+            }
         }
     }
 

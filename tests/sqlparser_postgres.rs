@@ -4882,6 +4882,30 @@ fn parse_delimited_identifiers() {
 }
 
 #[test]
+fn parse_update_array_subscript_assignment() {
+    let statement =
+        pg().verified_stmt("UPDATE items SET values[2] = 5, matrix[1][2:3] = ARRAY[7, 8]");
+    let Statement::Update(Update { assignments, .. }) = statement else {
+        panic!("expected UPDATE");
+    };
+    assert!(matches!(
+        &assignments[0].target,
+        AssignmentTarget::Subscript { column, subscripts }
+            if column.to_string() == "values"
+                && matches!(subscripts.as_slice(), [Subscript::Index { .. }])
+    ));
+    assert!(matches!(
+        &assignments[1].target,
+        AssignmentTarget::Subscript { column, subscripts }
+            if column.to_string() == "matrix"
+                && matches!(
+                    subscripts.as_slice(),
+                    [Subscript::Index { .. }, Subscript::Slice { .. }]
+                )
+    ));
+}
+
+#[test]
 fn parse_update_has_keyword() {
     pg().one_statement_parses_to(
         r#"UPDATE test SET name=$1,
