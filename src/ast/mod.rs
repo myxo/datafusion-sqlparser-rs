@@ -8038,6 +8038,13 @@ impl fmt::Display for Assignment {
 pub enum AssignmentTarget {
     /// A single column
     ColumnName(ObjectName),
+    /// An array element or slice assignment target.
+    Subscript {
+        /// The array column being assigned.
+        column: ObjectName,
+        /// One or more array indexes or slices.
+        subscripts: Vec<Subscript>,
+    },
     /// A tuple of columns
     Tuple(Vec<ObjectName>),
 }
@@ -8046,6 +8053,13 @@ impl fmt::Display for AssignmentTarget {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             AssignmentTarget::ColumnName(column) => write!(f, "{column}"),
+            AssignmentTarget::Subscript { column, subscripts } => {
+                write!(f, "{column}")?;
+                for subscript in subscripts {
+                    write!(f, "[{subscript}]")?;
+                }
+                Ok(())
+            }
             AssignmentTarget::Tuple(columns) => write!(f, "({})", display_comma_separated(columns)),
         }
     }
