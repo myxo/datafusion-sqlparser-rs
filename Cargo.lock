@@ -406,6 +406,30 @@ dependencies = [
 ]
 
 [[package]]
+name = "pg_fake_sqlparser"
+version = "0.63.0"
+dependencies = [
+ "bigdecimal",
+ "log",
+ "matches",
+ "pg_fake_sqlparser_derive",
+ "pretty_assertions",
+ "recursive",
+ "serde",
+ "serde_json",
+ "simple_logger",
+]
+
+[[package]]
+name = "pg_fake_sqlparser_derive"
+version = "0.6.0"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 3.0.4",
+]
+
+[[package]]
 name = "pin-project-lite"
 version = "0.2.17"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -635,35 +659,11 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0c790de23124f9ab44544d7ac05d60440adc586479ce501c1d6d7da3cd8c9cf5"
 
 [[package]]
-name = "sqlparser"
-version = "0.63.0"
-dependencies = [
- "bigdecimal",
- "log",
- "matches",
- "pretty_assertions",
- "recursive",
- "serde",
- "serde_json",
- "simple_logger",
- "sqlparser_derive",
-]
-
-[[package]]
 name = "sqlparser_bench"
 version = "0.1.0"
 dependencies = [
  "criterion",
- "sqlparser",
-]
-
-[[package]]
-name = "sqlparser_derive"
-version = "0.6.0"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 3.0.4",
+ "pg_fake_sqlparser",
 ]
 
 [[package]]

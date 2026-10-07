@@ -16,7 +16,7 @@
 # under the License.
 
 [package]
-name = "sqlparser_derive"
+name = "pg_fake_sqlparser_derive"
 description = "Procedural (proc) macros for sqlparser"
 version = "0.6.0"
 authors = ["sqlparser-rs authors"]
@@ -32,6 +32,7 @@ include = [
 edition = "2021"
 
 [lib]
+name = "sqlparser_derive"
 proc-macro = true
 
 [lints.rust]
