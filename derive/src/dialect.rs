@@ -256,60 +256,30 @@ fn extract_param_names(sig: &Signature) -> Vec<&Ident> {
         .collect()
 }
 
-/// Read the `dialect/mod.rs` file that contains the Dialect trait.
-///
-/// Searches for the file in the following order:
-/// 1. `$CARGO_MANIFEST_DIR/src/dialect/mod.rs` - works when the macro is
-///    invoked from within the `sqlparser` crate itself (e.g. in tests).
-/// 2. `<sqlparser_derive dir>/../src/dialect/mod.rs` - works when
-///    `sqlparser_derive` lives in a workspace alongside the main crate
-///    (the standard `derive/` layout).
-/// 3. Sibling directories of the compiled `sqlparser_derive` crate in the
-///    Cargo registry - works when an external crate uses `derive_dialect!`
-///    via a registry dependency.
 fn read_dialect_mod_file() -> Result<String, String> {
-    use std::path::{Path, PathBuf};
+    read_dialect_mod_file_at(std::path::Path::new(env!("CARGO_MANIFEST_DIR")))
+}
 
-    const DERIVE_CRATE_DIR: &str = env!("CARGO_MANIFEST_DIR");
-    let derive_dir = Path::new(DERIVE_CRATE_DIR);
-    let mut candidates: Vec<PathBuf> = Vec::new();
-
-    // The crate being compiled (eg: within sqlparser).
-    if let Ok(manifest_dir) = std::env::var("CARGO_MANIFEST_DIR") {
-        candidates.push(Path::new(&manifest_dir).join("src/dialect/mod.rs"));
-    }
-    // Workspace layout: the main crate is the parent of `derive/`.
-    candidates.push(derive_dir.join("../src/dialect/mod.rs"));
-
-    // Cargo registry: look for sibling `sqlparser-*` directories (prefer newest).
-    if let Some(parent) = derive_dir.parent() {
-        if let Ok(entries) = std::fs::read_dir(parent) {
-            let mut siblings: Vec<_> = entries
-                .filter_map(|e| e.ok())
-                .filter(|e| {
-                    let name = e.file_name();
-                    let name = name.to_string_lossy();
-                    name.starts_with("sqlparser-") && !name.starts_with("sqlparser-derive")
-                })
-                .collect();
-            siblings.sort_by_key(|e| std::cmp::Reverse(e.file_name()));
-            candidates.extend(
-                siblings
-                    .into_iter()
-                    .map(|e| e.path().join("src/dialect/mod.rs")),
-            );
-        }
-    }
-    for path in &candidates {
-        if let Ok(content) = std::fs::read_to_string(path) {
-            return Ok(content);
-        }
-    }
-    Err(format!(
-        "Could not find `sqlparser` dialect/mod.rs file. \
-         Searched in $CARGO_MANIFEST_DIR/src/dialect/mod.rs and \
-         the `sqlparser_derive` crate at {DERIVE_CRATE_DIR}"
-    ))
+fn read_dialect_mod_file_at(derive_dir: &std::path::Path) -> Result<String, String> {
+    let parser_version = include_str!("../parser-version").trim();
+    let parent = derive_dir.parent().ok_or_else(|| {
+        format!(
+            "Derive crate has no parent directory: {}",
+            derive_dir.display()
+        )
+    })?;
+    let parser_dir = if derive_dir.file_name().is_some_and(|name| name == "derive") {
+        parent.to_path_buf()
+    } else {
+        parent.join(format!("pg_fake_sqlparser-{parser_version}"))
+    };
+    let path = parser_dir.join("src/dialect/mod.rs");
+    std::fs::read_to_string(&path).map_err(|error| {
+        format!(
+            "Could not read pg_fake_sqlparser {parser_version} dialect source at {}: {error}",
+            path.display()
+        )
+    })
 }
 
 /// Extract all methods from the `Dialect` trait (excluding `dialect` for TypeId)
@@ -349,4 +319,49 @@ fn is_bool_method(sig: &Signature) -> bool {
             &sig.output,
             ReturnType::Type(_, ty) if matches!(ty.as_ref(), Type::Path(p) if p.path.is_ident("bool"))
         )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::read_dialect_mod_file_at;
+
+    #[test]
+    fn reads_workspace_dialect_source() {
+        let root = tempfile::tempdir().unwrap();
+        let source = root.path().join("src/dialect");
+        std::fs::create_dir_all(&source).unwrap();
+        std::fs::write(source.join("mod.rs"), "workspace dialect").unwrap();
+        assert_eq!(
+            read_dialect_mod_file_at(&root.path().join("derive")).unwrap(),
+            "workspace dialect"
+        );
+    }
+
+    #[test]
+    fn reads_only_the_paired_registry_version() {
+        let root = tempfile::tempdir().unwrap();
+        let version = include_str!("../parser-version").trim();
+        for (name, content) in [
+            (format!("pg_fake_sqlparser-{version}"), "paired dialect"),
+            ("pg_fake_sqlparser-99.0.0".into(), "wrong fork version"),
+            ("sqlparser-99.0.0".into(), "upstream dialect"),
+        ] {
+            let source = root.path().join(name).join("src/dialect");
+            std::fs::create_dir_all(&source).unwrap();
+            std::fs::write(source.join("mod.rs"), content).unwrap();
+        }
+        let derive_dir = root.path().join("pg_fake_sqlparser_derive-0.6.0");
+        assert_eq!(
+            read_dialect_mod_file_at(&derive_dir).unwrap(),
+            "paired dialect"
+        );
+        std::fs::remove_file(
+            root.path()
+                .join(format!("pg_fake_sqlparser-{version}/src/dialect/mod.rs")),
+        )
+        .unwrap();
+        let error = read_dialect_mod_file_at(&derive_dir).unwrap_err();
+        assert!(error.contains(&format!("pg_fake_sqlparser {version}")));
+        assert!(error.contains("src/dialect/mod.rs"));
+    }
 }

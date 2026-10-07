@@ -190,3 +190,11 @@ fn test_lambda_keyword_syntax_with_json_arrow_operator() {
     };
     assert_eq!(&BinaryOperator::Arrow, op);
 }
+
+#[test]
+fn matches_derive_parser_version() {
+    assert_eq!(
+        include_str!("../derive/parser-version").trim(),
+        env!("CARGO_PKG_VERSION")
+    );
+}
