@@ -17,18 +17,21 @@
 
 [package]
 name = "pg_fake_sqlparser_derive"
-description = "Procedural (proc) macros for sqlparser"
+description = "Procedural macros for the pg_fake_sqlparser fork"
 version = "0.6.0"
 authors = ["sqlparser-rs authors"]
-documentation = "https://docs.rs/sqlparser_derive/"
+documentation = "https://docs.rs/pg_fake_sqlparser_derive/"
 keywords = ["ansi", "sql", "lexer", "parser"]
-repository = "https://github.com/sqlparser-rs/sqlparser-rs"
+repository = "https://github.com/myxo/datafusion-sqlparser-rs"
 license = "Apache-2.0"
+readme = "README.md"
 include = [
     "src/**/*.rs",
     "Cargo.toml",
+    "README.md",
     "parser-version",
     "LICENSE.TXT",
+    "NOTICE.TXT",
 ]
 edition = "2021"
 

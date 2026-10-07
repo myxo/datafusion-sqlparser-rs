@@ -17,201 +17,66 @@
   under the License.
 -->
 
-# SQL Parser Derive Macro
+# pg_fake_sqlparser_derive
 
-## Visit
+Procedural macros for the `pg_fake_sqlparser` fork maintained for `pg_fake`.
+This package derives from [Apache DataFusion sqlparser-rs](https://github.com/apache/datafusion-sqlparser-rs)
+and is not an official Apache release. Its Rust library name remains
+`sqlparser_derive`.
 
-This crate contains a procedural macro that can automatically derive
-implementations of the `Visit` trait in the [sqlparser](https://crates.io/crates/sqlparser) crate
+It provides `Visit` and `VisitMut` derives for AST traversal and
+`derive_dialect!` for custom SQL dialects.
+
+## Recommended use
+
+Enable the corresponding features on the parser crate. It selects the paired
+derive version automatically:
+
+```toml
+[dependencies]
+sqlparser = { package = "pg_fake_sqlparser", version = "0.63.0", features = ["visitor", "derive-dialect"] }
+```
 
 ```rust
-#[derive(Visit, VisitMut)]
-struct Foo {
-    boolean: bool,
-    bar: Bar,
-}
+use sqlparser::derive_dialect;
+use sqlparser::dialect::{Dialect, GenericDialect};
 
-#[derive(Visit, VisitMut)]
-enum Bar {
-    A(),
-    B(String, bool),
-    C { named: i32 },
+derive_dialect!(CustomDialect, GenericDialect, overrides = {
+    supports_order_by_all = true,
+});
+
+fn main() {
+    assert!(CustomDialect::new().supports_order_by_all());
 }
 ```
 
-Will generate code akin to
+## Direct dependency and version pairing
 
-```rust
-impl Visit for Foo {
-    fn visit<V: Visitor>(&self, visitor: &mut V) -> ControlFlow<V::Break> {
-        self.boolean.visit(visitor)?;
-        self.bar.visit(visitor)?;
-        ControlFlow::Continue(())
-    }
-}
+If you need a direct dependency on the procedural macros, use both aliases:
 
-impl Visit for Bar {
-    fn visit<V: Visitor>(&self, visitor: &mut V) -> ControlFlow<V::Break> {
-        match self {
-            Self::A() => {}
-            Self::B(_1, _2) => {
-                _1.visit(visitor)?;
-                _2.visit(visitor)?;
-            }
-            Self::C { named } => {
-                named.visit(visitor)?;
-            }
-        }
-        ControlFlow::Continue(())
-    }
-}
+```toml
+[dependencies]
+sqlparser = { package = "pg_fake_sqlparser", version = "=0.63.0", features = ["visitor"] }
+sqlparser_derive = { package = "pg_fake_sqlparser_derive", version = "=0.6.0" }
 ```
 
-Some types may wish to call a corresponding method on the visitor:
+Keep the `sqlparser` dependency key because generated code refers to that
+name. Derive version **0.6.0** is paired with parser version **0.63.0**.
+Do not substitute the upstream `sqlparser` or `sqlparser_derive` packages.
 
-```rust
-#[derive(Visit, VisitMut)]
-#[visit(with = "visit_expr")]
-enum Expr {
-    IsNull(Box<Expr>),
-    ..
-}
-```
+For `derive_dialect!`, the shipped `parser-version` file identifies the
+parser source version. The macro reads `src/dialect/mod.rs` from the parser
+repository above `derive/`, or from the sibling Cargo registry directory
+`pg_fake_sqlparser-0.63.0`. It reports an error when that source is missing,
+instead of selecting another cached parser version. Unversioned vendor
+layouts are not supported.
 
-This will result in the following sequence of visitor calls when an `IsNull`
-expression is visited
+## Links and license
 
-```
-visitor.pre_visit_expr(<is null expr>)
-visitor.pre_visit_expr(<is null operand>)
-visitor.post_visit_expr(<is null operand>)
-visitor.post_visit_expr(<is null expr>)
-```
+- [Macro API](https://docs.rs/pg_fake_sqlparser_derive/latest/sqlparser_derive/)
+- [Parser API](https://docs.rs/pg_fake_sqlparser/latest/sqlparser/)
+- [Fork repository](https://github.com/myxo/datafusion-sqlparser-rs)
 
-For some types it is only appropriate to call a particular visitor method in
-some contexts. For example, not every `ObjectName` refers to a relation.
-
-In these cases, the `visit` attribute can be used on the field for which we'd
-like to call the method:
-
-```rust
-#[derive(Visit, VisitMut)]
-#[visit(with = "visit_table_factor")]
-pub enum TableFactor {
-    Table {
-        #[visit(with = "visit_relation")]
-        name: ObjectName,
-        alias: Option<TableAlias>,
-    },
-    ..
-}
-```
-
-This will generate
-
-```rust
-impl Visit for TableFactor {
-    fn visit<V: Visitor>(&self, visitor: &mut V) -> ControlFlow<V::Break> {
-        visitor.pre_visit_table_factor(self)?;
-        match self {
-            Self::Table { name, alias } => {
-                visitor.pre_visit_relation(name)?;
-                name.visit(visitor)?;
-                visitor.post_visit_relation(name)?;
-                alias.visit(visitor)?;
-            }
-        }
-        visitor.post_visit_table_factor(self)?;
-        ControlFlow::Continue(())
-    }
-}
-```
-
-Note that annotating both the type and the field is incorrect as it will result
-in redundant calls to the method. For example
-
-```rust
-#[derive(Visit, VisitMut)]
-#[visit(with = "visit_expr")]
-enum Expr {
-    IsNull(#[visit(with = "visit_expr")] Box<Expr>),
-    ..
-}
-```
-
-will result in these calls to the visitor
-
-
-```
-visitor.pre_visit_expr(<is null expr>)
-visitor.pre_visit_expr(<is null operand>)
-visitor.pre_visit_expr(<is null operand>)
-visitor.post_visit_expr(<is null operand>)
-visitor.post_visit_expr(<is null operand>)
-visitor.post_visit_expr(<is null expr>)
-```
-
-If the field is a `Option` and add `#[with = "visit_xxx"]` to the field, the generated code
-will try to access the field only if it is `Some`:
-
-```rust
-#[cfg_attr(feature = "visitor", derive(Visit, VisitMut))]
-pub struct ShowStatementIn {
-    pub clause: ShowStatementInClause,
-    pub parent_type: Option<ShowStatementInParentType>,
-    #[cfg_attr(feature = "visitor", visit(with = "visit_relation"))]
-    pub parent_name: Option<ObjectName>,
-}
-```
-
-This will generate
-
-```rust
-impl sqlparser::ast::Visit for ShowStatementIn {
-    fn visit<V: sqlparser::ast::Visitor>(
-        &self,
-        visitor: &mut V,
-    ) -> ::std::ops::ControlFlow<V::Break> {
-        sqlparser::ast::Visit::visit(&self.clause, visitor)?;
-        sqlparser::ast::Visit::visit(&self.parent_type, visitor)?;
-        if let Some(value) = &self.parent_name {
-            visitor.pre_visit_relation(value)?;
-            sqlparser::ast::Visit::visit(value, visitor)?;
-            visitor.post_visit_relation(value)?;
-        }
-        ::std::ops::ControlFlow::Continue(())
-    }
-}
-
-impl sqlparser::ast::VisitMut for ShowStatementIn {
-    fn visit<V: sqlparser::ast::VisitorMut>(
-        &mut self,
-        visitor: &mut V,
-    ) -> ::std::ops::ControlFlow<V::Break> {
-        sqlparser::ast::VisitMut::visit(&mut self.clause, visitor)?;
-        sqlparser::ast::VisitMut::visit(&mut self.parent_type, visitor)?;
-        if let Some(value) = &mut self.parent_name {
-            visitor.pre_visit_relation(value)?;
-            sqlparser::ast::VisitMut::visit(value, visitor)?;
-            visitor.post_visit_relation(value)?;
-        }
-        ::std::ops::ControlFlow::Continue(())
-    }
-}
-```
-
-## Releasing
-
-This crate's release is not automated. Instead it is released manually as needed
-
-Steps:
-1. Update the version in `Cargo.toml`
-2. Update the corresponding version in `../Cargo.toml`
-3. Commit via PR
-4. Publish to crates.io:
-
-```shell
-# update to latest checked in main branch and publish via
-cargo publish 
-```
-
+Licensed under [Apache-2.0](LICENSE.TXT). Upstream attribution is retained in
+[NOTICE.TXT](NOTICE.TXT) and the source files. This fork includes modifications
+for `pg_fake`; upstream authorship is preserved.
