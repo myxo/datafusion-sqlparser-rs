@@ -17,8 +17,7 @@
 
 name: ClusterFuzzLite batch fuzzing
 on:
-  schedule:
-    - cron: '0 06 * * *' # 06:00 UTC daily
+  workflow_dispatch:
 permissions: read-all
 jobs:
   BatchFuzzing:
